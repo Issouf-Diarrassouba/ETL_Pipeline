@@ -1,6 +1,10 @@
 #importing the cdb configuration 
 from database import get_connection , init_db #importing the database connection and initialization functions from the database.py file to establish a connection to the PostgreSQL database and create the necessary schema and tables for the ETL pipeline.
 from extract import extract_csv, extract_api
+from transform import DataTransformer
+from load import DataLoader
+from project_secrets import postgres_password
+
 
 import psycopg2
 
@@ -44,10 +48,43 @@ def main():
     print("API Data extraction shootouts complete", api_data["shootouts"].head())
     print("API Data extraction goalscorers complete", api_data["goalscorers"].head())
     #transformation phase: placeholder for any data transformation logic that might be needed before loading the data into the database
-    #pass
+    transformer = DataTransformer(csv_data,api_data)
+    transformed_data = transformer.transform_all()
+
+    print("Data Transformation Completed ")
 
     # Loading phase: placeholder for loading the extracted (and potentially transformed) data into the database
-    #pass   
+    load_data = DataLoader(transformed_data,db_configuration={
+            "host": "localhost",
+            "database": "etl",
+            "user": "etl_user",
+            "password": postgres_password,
+            "port": 5433
+    })   
+
+    nation_map = {}
+    tournament_map = {}
+    player_map = {}
+
+    all_nations = set(transformed_data["results"]["home_team"].unique()).union(transformed_data["results"]["away_team"].unique())
+
+    for nation in all_nations:
+        nation_map[nation] = load_data.load_nation(nation)
+    
+    for tournament in transformed_data["results"]["tournament"].unique():
+        tournament_map[tournament] = load_data.load_tournament(tournament)
+    
+    for i, row in transformed_data["results"].iterrows():
+        match = row.to_dict()
+
+        match["home_team_id"] = nation_map[match["home_team"]]
+        match["away_team_id"] = nation_map[match["away_team"]]
+        match["tournament_id"] = tournament_map[match["tournament"]]
+
+        load_data.load_matches(match)
+    print("Nations in dataset:", transformed_data["results"]["home_team"].unique())
+    print("Sample row:", transformed_data["results"].iloc[0])
+    print("COmpleted Loading")
 
     connection.close() # closing the database connection after the ETL process is complete  
     print("ETL pipeline completed successfully. Database connection closed.")
