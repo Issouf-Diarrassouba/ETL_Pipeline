@@ -1,53 +1,59 @@
 import pandas as pd
-#transform phase of the ETL pipeline, where data is cleaned, transformed, and prepared for loading into the database. This module contains functions that perform various transformations on the extracted data, such as cleaning, filtering, and aggregating.
 
 class DataTransformer:
-
 
     def __init__(self, csv_data, api_data):
         self.csv_data = csv_data
         self.api_data = api_data
 
-
+    # Cleaning Column names and Whitespace 
     def normalize_column_names(self, df):
-        df = df.copy()  # Create a copy of the DataFrame to avoid modifying the original data
-        df.columns = df.columns.str.lower().str.strip()  # Normalize column names: lowercase and strip whitespace
+        df = df.copy() 
+        df.columns = df.columns.str.lower().str.strip() 
         
+        # Converting date' column to datetime format
         if 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date'], errors='coerce')  # Convert 'date' column to datetime format, handling errors by coercing invalid values to NaT
-        
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+
         return df
         
-
-    # csv transformation function that takes the extracted CSV data as input and performs various transformations on it, such as cleaning, filtering, and aggregating. The transformed data is returned as a dictionary of pandas DataFrames, where each key corresponds to a specific dataset (e.g., "results", "shootouts", "goalscorers").
+    # Cleaning CSV Data 
     def transform_csv_data(self):
 
-        return {key: self.normalize_column_names(df) for key, df in self.csv_data.items()}  # Apply normalization to each DataFrame in the CSV data dictionary
-
-    # api transformation function that takes the extracted API data as input and performs similar transformations as the CSV transformation function. The transformed API data is returned as a dictionary of pandas DataFrames, where each key corresponds to a specific dataset (e.g., "results", "shootouts", "goalscorers").
+        return {key: self.normalize_column_names(df) for key, df in self.csv_data.items()} 
+    
+    # Cleaning Api Data 
     def transform_api_data(self):
-        return {key: self.normalize_column_names(df) for key, df in self.api_data.items()}  # Apply normalization to each DataFrame in the API data dictionary
+        return {key: self.normalize_column_names(df) for key, df in self.api_data.items()}  
     
     def transform_results(self,df: pd.DataFrame):
-        df = df.copy()  # Create a copy of the DataFrame to avoid modifying the
+        df = df.copy() 
+        # Converting home score to an integer to match table constraint 
         if "home_score" in df.columns:
             df["home_score"] = pd.to_numeric(df["home_score"], errors='coerce').fillna(0).astype(int)  # Convert 'home_score' column to numeric, handling errors by coercing invalid values to NaN
         
+        # Converting away score to an integer to match table constraint 
         if "away_score" in df.columns:
-            df["away_score"] = pd.to_numeric(df["away_score"], errors='coerce').fillna(0).astype(int)  # Convert 'away_score' column to numeric, handling errors by coercing invalid values to NaNdf
+            df["away_score"] = pd.to_numeric(df["away_score"], errors='coerce').fillna(0).astype(int)  #
+        
+        # Converting Neutral to boolean and making sure missing values are defaulted to false 
         if "neutral" in df.columns:
-            df["neutral"] = df["neutral"].fillna(False).astype(bool)  # Convert 'neutral' column to boolean, defaulting to False if the value is missing or not provided
-
+            df["neutral"] = df["neutral"].fillna(False).astype(bool)  
+            
         return df
 
     def transform_goalscorers(self,df: pd.DataFrame):
-        df = df.copy()  # Create a copy of the DataFrame to avoid modifying the original data
+        df = df.copy()  
+
+        #Converting minute to an integer to match table constraint 
         if "minute" in df.columns:
             df["minute"] = pd.to_numeric(df["minute"], errors='coerce').fillna(0).astype(int)  # Convert 'minute' column to numeric, handling errors by coercing invalid values to NaN
        
+       # Convert penalty to boolena to match constraint and fill missing values as boolean 
         if "penalty" in df.columns: 
-            df["penalty"] = df["penalty"].fillna(False).astype(bool)  # Convert 'penalty' column to boolean, defaulting to False if the value is missing or not provided
+            df["penalty"] = df["penalty"].fillna(False).astype(bool)  
         
+        # if scorer exists drop columns where values are null 
         if "scorer" in df.columns: 
             df = df.dropna(subset=["scorer"])
 
@@ -58,30 +64,36 @@ class DataTransformer:
         
         shootout_columns = {"winner", "first_shooter"}
         
+        # Drop all null values only if  winner and first shooter exists in df 
         if shootout_columns.issubset(df.columns):
             df = df.dropna(subset=["winner", "first_shooter"])
 
         return df
     
+    # Depending on the file inputted we are calling its respective transform function, to return the items in the df 
     def apply_transformation(self, data): 
+
         transform = { 
             "results": self.transform_results, 
             "goalscorers": self.transform_goalscorers, 
             "shootouts": self.transform_shootouts,
         }
+
         return { 
             key: transform[key](df) if key in transform else df.copy()
             for key, df in data.items()
         }
     
     def transform_all(self): 
+        # Transforming api and csv sources independently 
         csv_data = self.apply_transformation(self.transform_csv_data())
         api_data = self.apply_transformation(self.transform_api_data())
 
+        # Outer Joining both data sets together ,
         keys = set(csv_data.keys()).union(set(api_data.keys()))
 
         merged_dataset = {}
-
+        #  Merging Corresponding tables and Removing duplicates from datasets , to prepare for loading 
         for key in keys: 
             structure = [data[key] for data in [csv_data, api_data] if key in data]
             merged_dataset[key] = pd.concat(structure, ignore_index=True).drop_duplicates() if structure else pd.DataFrame()

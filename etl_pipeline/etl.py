@@ -4,56 +4,59 @@ from extract import extract_csv, extract_api
 from transform import DataTransformer
 from load import DataLoader
 from project_secrets import postgres_password
-
-
+from project_logger import logger
 import psycopg2
 
 def db_connection():
-
     connection = get_connection()
-    print("Succeccessful connection to Database}")
+    logger.info(f"Successful db connection {connection}")
 
-    #calling the schema function
-    #passingt eh database connection as a parameter 
+    # Calling database.py to create schmeas and initialize tables 
     init_db(connection)
     
-    #connection.close()
-    return connection #allowing us to use the connection in other parts of the pipeline, such as loading data into the database or performing transformations that require database access
+    # allowing us to use the connection in other parts of the pipeline, such as loading data into the database or performing transformations that require database access
+    return connection 
 
 def main(): 
-    print("Starting ETL pipeline...")
-    connection = db_connection() # setting up the database connection and initializing the database schema
-    # Extraction phase: calling the extract functions to retrieve data from CSV files and an API endpoint
-    print("Extracting data from CSV files and API...")
-    print("ETL setup complete (DB ready)")
-    csv_data = extract_csv()
-    # Extracting data from the API endpoint, assuming the Flask app is running locally on port 5000 and has an endpoint for results. It is important to ensure that the Flask app is running before executing this ETL pipeline, otherwise the API extraction will fail.
-    # It can also change to any other endpoint that is available in the Flask app, such as /api/shootouts or /api/goalscorers, depending on the data needed for the ETL process. The extracted data from the API will be in JSON format and converted to a pandas DataFrame for further processing in the ETL pipeline.
-    api_data = {
-        "results": extract_api("http://127.0.0.1:5000/api/results"),
-        "shootouts": extract_api("http://127.0.0.1:5000/api/shootouts"),
-        "goalscorers": extract_api("http://127.0.0.1:5000/api/goalscorers")
-    }
-    # Note : CSV and Json contains the same data but not the same order-structure, but we are extracting from both sources to demonstrate the multi-source extraction capability of the ETL pipeline. This allows us to compare the data from both sources and ensure that our extraction logic is working correctly for different formats and structures of data. It also provides flexibility in case one source becomes unavailable or if we want to switch to a different source in the future without having to change the entire ETL pipeline.
-    # Test print statements to verify that the data has been extracted correctly from both sources and to check the structure of the extracted data. This can help identify any issues with the extraction logic or with the data itself before proceeding to the transformation and loading phases of the ETL pipeline.
-    print("CSV Shootouts")
-    print(csv_data["shootouts"].head())
+    print("--------------Starting ETL pipeline--------------")
+    # Set up db connection
+    connection = db_connection() 
+    # Extraction phase: 
 
-    print("CSV Goalscorers")
-    print(csv_data["goalscorers"].head())
+    # Extracting CSV Data 
+    try: 
+        csv_data = extract_csv()
+        logger.info(f"Extracting CSV data. Total Rows: {list(csv_data.keys())}")
+    except Exception as exception: 
+        logger.critical(f"CSV Data Failed To Extract: {exception}")
 
-    print("Data extraction complete", csv_data.keys())
+    # Extracting API Data 
+    try: 
+        api_data = {
+            "results": extract_api("http://127.0.0.1:5000/api/results"),
+            "shootouts": extract_api("http://127.0.0.1:5000/api/shootouts"),
+            "goalscorers": extract_api("http://127.0.0.1:5000/api/goalscorers")
+        }
 
-    print("API Data extraction results complete", api_data["results"].head())
-    print("API Data extraction shootouts complete", api_data["shootouts"].head())
-    print("API Data extraction goalscorers complete", api_data["goalscorers"].head())
-    #transformation phase: placeholder for any data transformation logic that might be needed before loading the data into the database
-    transformer = DataTransformer(csv_data,api_data)
-    transformed_data = transformer.transform_all()
+        logger.info(f"Extracting API Results Rows: {len(api_data['results'])}")
+        logger.info(f"Extracting API Shootouts Rows: {len(api_data['shootouts'])}")
+        logger.info(f"Extracting API GoalScorers Rows: {len(api_data['goalscorers'])}")
 
-    print("Data Transformation Completed ")
+    except Exception as exception: 
+        logger.critical(f"Failure Extracting API Data : {exception}") 
+    
+    # Transformation Phase 
+    try: 
+        transformer = DataTransformer(csv_data,api_data)
+        transformed_data = transformer.transform_all()
+        logger.info("Extracted Data Transforamtion Completed")
+    
+    except Exception as exception: 
+        logger.critical(f"Failed to Transform Extracted Data: {exception}")
 
-    # Loading phase: placeholder for loading the extracted (and potentially transformed) data into the database
+    # Loading Phase
+
+    # Creating data Loader Instance to Load data 
     load_data = DataLoader(transformed_data,db_configuration={
             "host": "localhost",
             "database": "etl",
@@ -62,35 +65,128 @@ def main():
             "port": 5433
     })   
 
+    # Table Mapping 
     nation_map = {}
     tournament_map = {}
     player_map = {}
+    match_map = {}
 
+    # Nation Loading Phase  
+    
+    # Obtaining all nations that was found in the dataset 
     all_nations = set(transformed_data["results"]["home_team"].unique()).union(transformed_data["results"]["away_team"].unique())
 
     for nation in all_nations:
-        nation_map[nation] = load_data.load_nation(nation)
+        # Loading Nation Names (UNIQUE CONSTRAINT)
+        try: 
+            logger.info(f"Attempting to Load Nations {nation}")
+            nation_map[nation] = load_data.load_nation(nation)
+            logger.info(f"Successfully Loaded Nations {nation}")
+        except Exception as exception: 
+            load_data.load_stg_rejects(nation, {exception}, "nations")
+            logger.error(f"Failed Nation Load: {nation} | {exception}")
+
     
+    # Tournament Loading Phase  
     for tournament in transformed_data["results"]["tournament"].unique():
-        tournament_map[tournament] = load_data.load_tournament(tournament)
+        # Loading Tournament names (UNIQUE CONSTRAINT)
+        try: 
+            logger.info(f"Attempting to Load Tournaments {tournament}")
+            tournament_map[tournament] = load_data.load_tournament(tournament)
+            logger.info(f"Successfully Inserted Tournaments {tournament}")
+        except Exception as exception: 
+            load_data.load_stg_rejects(tournament, str(exception), "tournament")
+            logger.error(f"Failed Tournament Load: {tournament} | {exception}")
     
-    for i, row in transformed_data["results"].iterrows():
-        match = row.to_dict()
+    # Matches Loading Phase 
+    # Mapping Columns from transformed data 
+    for i, col in transformed_data["results"].iterrows():
+        # Converting row to dictionary as its easier to access fields and map ids cleaner 
+        match = col.to_dict()
 
         match["home_team_id"] = nation_map[match["home_team"]]
         match["away_team_id"] = nation_map[match["away_team"]]
         match["tournament_id"] = tournament_map[match["tournament"]]
+        try: 
+            match_id = load_data.load_matches(match)
+            logger.info("Loading Match Data")
+        except Exception as exception: 
+            load_data.load_stg_rejects(col, str(exception), "matches")
+       
+        key = (match["home_team"], match["away_team"], match["date"])
+        match_map[key] = match_id
 
-        load_data.load_matches(match)
-    print("Nations in dataset:", transformed_data["results"]["home_team"].unique())
-    print("Sample row:", transformed_data["results"].iloc[0])
-    print("COmpleted Loading")
+    # Players Loading Phase 
+    # The Only players in the DB would be indiivudauls that have scored wh appreared in the db not every single player in the world 
+    for i , col in transformed_data["goalscorers"].iterrows():
+        player_name = col["scorer"]
+        player_nation = col["team"]
+        try:
+            if player_name not in player_map: 
+                player_map[player_name] = load_data.load_players({
+                    "player_name": player_name , 
+                    "nation_id"  : nation_map[player_nation]
+                })
+            logger.info("Loading Player Data")
+        except Exception as exception: 
+            load_data.load_stg_rejects(col, str(exception), "players")
+            logger.info(f"Failed to Load Player Data: {player_name} : exception : {exception}")
+
+    # Goals Loading Phase 
+    for i , col in transformed_data["goalscorers"].iterrows(): 
+        player_name = col["scorer"]
+        player_nation = col["team"]
+
+        # Obtainting Player ID
+        player_id = player_map[player_name]
+
+        if player_id is None: 
+            logger.info(f"No player_id found for {player_name} from {player_nation}")
+        
+
+        key = (col["home_team"], col["away_team"], col["date"])
+        match_id = match_map.get(key)
+
+        if match_id is None: 
+            logger.info(f"No match_id found for key={key} ")
+            continue
+
+
+        load_data.load_goals({
+            "match_id"  : match_id, 
+            "player_id" : player_id,
+            "minute_scored" : col["minute"],
+            "is_penalty" :col["penalty"]
+        })
+
+        logger.info(f"Inserted goal: {player_name} : Minute Scored : {col['minute']} , Match ID : {match_id} ")
+
+
+    # Shootout Loading Phase  
+    for i , col in transformed_data["shootouts"].iterrows(): 
+        first_shooting_team = col["first_shooter"]
+        match_winner = col["winner"]
+
+        key = (col["home_team"], col["away_team"], col["date"])
+        match_id = match_map.get(key)
+    
+        if match_id is None: 
+            logger.info(f"No match_id found for key={key} ")
+            continue
+
+
+        load_data.load_shootout({
+            "match_id"  : match_id, 
+            "winner_team_id" : nation_map[match_winner],
+            "first_shooting_team_id" : nation_map[first_shooting_team]
+        })
+
+        logger.info(f"Penalty shootout: {col['home_team']} vs {col['away_team']}, \n First shooter : {first_shooting_team} \n Winner: {match_winner}")
+    
 
     connection.close() # closing the database connection after the ETL process is complete  
-    print("ETL pipeline completed successfully. Database connection closed.")
+    print("------------Successfully Ending ETL Pipeline------------")
 
 
 if __name__ == "__main__": 
-    print("in here")
     main()
-    print("Left the DB")

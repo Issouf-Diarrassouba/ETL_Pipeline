@@ -1,26 +1,26 @@
 #importing the cdb configuration 
 from configuration import PostgreConfiguration # importing the configuration class from the configuration.py file to access the database connection details and methods for generating the Data Source Name (DSN) string.
+from project_logger import logger 
 
 import psycopg2
 
 def get_connection(): 
     # Obtaining DB configuration
     config = PostgreConfiguration()
-    print ("Obtained configuration: ", config)
+    logger.info(f"Obtained db configuration {config}")
     return psycopg2.connect(config.dsn())
 
 # initializing database and creating the table structure 
 def init_db(connection):
     with connection.cursor() as cursor:
-        print ("Here in the databse")
 
-        cursor.execute ( """ DROP SCHEMA football CASCADE;
-CREATE SCHEMA football;""")
+        cursor.execute ( """ 
+                        TRUNCATE TABLE football.nation, football.tournament, football.matches, football.players, football.goals, football.shootout CASCADE;
+                        """)
 
         cursor.execute("""
                 CREATE SCHEMA IF NOT EXISTS football;
                        """)
-        print ("Created the Schema")
 
         #3NF : Nation
         cursor.execute(""" 
@@ -53,7 +53,8 @@ CREATE SCHEMA football;""")
                 neutral BOOLEAN, 
                 FOREIGN KEY (home_team_id) REFERENCES football.nation(nation_id), 
                 FOREIGN KEY (away_team_id) REFERENCES football.nation(nation_id), 
-                FOREIGN KEY (tournament_id) REFERENCES football.tournament(tournament_id)
+                FOREIGN KEY (tournament_id) REFERENCES football.tournament(tournament_id), 
+                UNIQUE(match_date, home_team_id, away_team_id, tournament_id)
             )
             """
         )
@@ -62,9 +63,10 @@ CREATE SCHEMA football;""")
         cursor.execute("""
                 CREATE TABLE IF NOT EXISTS football.players(
                         player_id SERIAL PRIMARY KEY, 
-                        player_name VARCHAR(50), 
+                        player_name VARCHAR(50) UNIQUE, 
                         nation_id INT, 
                         FOREIGN KEY (nation_id) REFERENCES football.nation(nation_id)
+                       
                        )
                        """)
     
@@ -77,7 +79,8 @@ CREATE SCHEMA football;""")
                         minute_scored INT NOT NULL, 
                         is_penalty BOOLEAN, 
                         FOREIGN KEY (match_id) REFERENCES football.matches(match_id),
-                        FOREIGN KEY (player_id) REFERENCES football.players(player_id)
+                        FOREIGN KEY (player_id) REFERENCES football.players(player_id), 
+                        UNIQUE(match_id, player_id, minute_scored)
                        )
                        """)
         
@@ -89,8 +92,20 @@ CREATE SCHEMA football;""")
                         first_shooting_team_id INT, 
                         FOREIGN KEY (match_id) REFERENCES football.matches(match_id), 
                         FOREIGN KEY (winner_team_id) REFERENCES football.nation(nation_id), 
-                        FOREIGN KEY (first_shooting_team_id) REFERENCES football.nation(nation_id)
+                        FOREIGN KEY (first_shooting_team_id) REFERENCES football.nation(nation_id), 
+                        UNIQUE(match_id, winner_team_id, first_shooting_team_id)
                        )
                        """)
         
+
+        cursor.execute("""
+                CREATE TABLE IF NOT EXISTS football.stg_rejects(
+                       reject_id SERIAL PRIMARY KEY, 
+                       src_name TEXT, 
+                       raw_record JSONB, 
+                       reason TEXT, 
+                       created_at TIMESTAMP DEFAULT NOW()
+                       )
+                    """)
+           
     connection.commit()

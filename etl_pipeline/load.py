@@ -1,5 +1,6 @@
 from database import get_connection, init_db
 import psycopg2
+import json
 import pandas as pd
 
 
@@ -61,6 +62,8 @@ class DataLoader:
         query = """
             INSERT INTO football.matches (match_date, home_team_id, away_team_id, home_score, away_score, tournament_id, city, country, neutral)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (match_date,home_team_id, away_team_id, tournament_id)
+            DO UPDATE SET match_date = EXCLUDED.match_date
             RETURNING match_id 
         """ 
         self.cursor.execute(query, (
@@ -80,10 +83,12 @@ class DataLoader:
         return match_id
 
 
-    def create_players(self, players): 
+    def load_players(self, players): 
         query = """
         INSERT INTO football.players (player_name, nation_id)
         VALUES (%s, %s)
+        ON CONFLICT (player_name)
+        DO UPDATE SET player_name = EXCLUDED.player_name
         RETURNING player_id 
         """
         self.cursor.execute (query, (
@@ -96,10 +101,12 @@ class DataLoader:
         return player_id 
 
 
-    def create_goals(self, goals): 
+    def load_goals(self, goals): 
         query = """
             INSERT INTO football.goals (match_id, player_id, minute_scored, is_penalty)
             VALUES (%s, %s, %s, %s)
+            ON CONFLICT (match_id, player_id, minute_scored)
+            DO UPDATE SET match_id = EXCLUDED.match_id
             RETURNING goal_id
         """ 
         self.cursor.execute(query, (
@@ -113,10 +120,12 @@ class DataLoader:
         return goal_id
 
 
-    def create_shootout(self, shootout): 
+    def load_shootout(self, shootout): 
         query = """
             INSERT INTO football.shootout (match_id, winner_team_id, first_shooting_team_id)
             VALUES (%s, %s, %s)
+            ON CONFLICT(match_id, winner_team_id, first_shooting_team_id)
+            DO UPDATE SET match_id = EXCLUDED.match_id
             RETURNING shootout_id
         """    
         self.cursor.execute(query, (
@@ -127,3 +136,14 @@ class DataLoader:
         shootout_id = self.cursor.fetchone()[0]
         self.connection.commit()
         return shootout_id
+    
+    def load_stg_rejects(self, record, reason, src): 
+        query = """
+            INSERT INTO footaball.stg_rejects (src_name, raw_record, reason)
+            VALUES (%s, %s, %s)
+        """
+        self.cursor.execute(query, (
+            src, 
+            json.dumps(record), 
+            reason
+        ) )

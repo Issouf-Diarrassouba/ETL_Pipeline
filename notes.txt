@@ -1,9 +1,0 @@
-🧠 Issues Encountered & Lessons Learned (ETL Reflection Paragraph)
-
-During development of the ETL pipeline, several challenges emerged across the transformation phase that informed improvements to the final design.
-Early versions of the transformer relied on dictionary-based ID mappings (for nations, tournaments, and players), which initially introduced tight coupling between transformation logic and assumed database structure.
-This approach later conflicted with the goal of maintaining a clean separation of concerns between transformation and loading, especially when integrating with a PostgreSQL database using serial primary keys. 
-Additionally, inconsistent handling of missing values and optional columns caused instability when datasets had slight schema differences between CSV and API sources. 
-This was addressed by introducing defensive column checks (e.g., verifying column existence before applying transformations) and standardizing schema normalization through a reusable column normalization function.
-Another key issue involved data merging, where early implementations risked duplication or schema drift when combining API and CSV sources. This was resolved using controlled concatenation with duplicate removal after ensuring consistent transformations were applied to both datasets.
-Finally, the pipeline evolved from a tightly coupled mapping-based design to a more modular transformation approach, where all ID resolution responsibilities were deferred to the loading phase, aligning the design with best practices for ETL pipelines and relational database ingestion.
