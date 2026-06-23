@@ -2,3 +2,6 @@ data/
 *.pid
 *.log
 .venv/
+etl_pipeline/__pycache__/
+etl_pipeline/project_secrets.py
+etl_pipeline/test_transformer.py
