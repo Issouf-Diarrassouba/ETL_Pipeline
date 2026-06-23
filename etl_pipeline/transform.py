@@ -1,5 +1,5 @@
 import pandas as pd
-
+from etl_pipeline.project_logger import logger
 class DataTransformer:
 
     def __init__(self, csv_data, api_data):
@@ -8,6 +8,11 @@ class DataTransformer:
 
     # Cleaning Column names and Whitespace 
     def normalize_column_names(self, df):
+        # If data getting passed in is not a datafarme wr dont process it and just return empty 
+        if not hasattr(df, "columns"): 
+            logger.warning("Invalid DataFrame Type: {type(df)}")
+            return pd.DataFrame()
+        
         df = df.copy() 
         df.columns = df.columns.str.lower().str.strip() 
         

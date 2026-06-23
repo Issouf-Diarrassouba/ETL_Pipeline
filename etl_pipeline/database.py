@@ -1,6 +1,5 @@
-#importing the cdb configuration 
-from configuration import PostgreConfiguration # importing the configuration class from the configuration.py file to access the database connection details and methods for generating the Data Source Name (DSN) string.
-from project_logger import logger 
+from etl_pipeline.configuration import PostgreConfiguration
+from etl_pipeline.project_logger import logger 
 
 import psycopg2
 
@@ -15,7 +14,7 @@ def init_db(connection):
     with connection.cursor() as cursor:
 
         cursor.execute ( """ 
-                        TRUNCATE TABLE football.nation, football.tournament, football.matches, football.players, football.goals, football.shootout CASCADE;
+                        TRUNCATE TABLE football.nation, football.tournament, football.matches, football.players, football.goals, football.shootout  RESTART IDENTITY CASCADE;
                         """)
 
         cursor.execute("""

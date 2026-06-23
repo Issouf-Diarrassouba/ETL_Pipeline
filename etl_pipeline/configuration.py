@@ -1,7 +1,7 @@
 # allows for interaction directly with my os 
 import os 
 #importing passcode frmo secret file, hide sensitive information from the codebase and keep it secure
-from project_secrets import postgres_password
+from etl_pipeline.project_secrets import postgres_password
 
 #databse configuration class for PostgreSQL, encapsulating connection details and providing a method to generate a Data Source Name (DSN) string for connecting to the database.
 class PostgreConfiguration: 

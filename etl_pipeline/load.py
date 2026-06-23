@@ -1,4 +1,4 @@
-from database import get_connection, init_db
+from etl_pipeline.database import get_connection, init_db
 import psycopg2
 import json
 import pandas as pd
@@ -139,7 +139,7 @@ class DataLoader:
     
     def load_stg_rejects(self, record, reason, src): 
         query = """
-            INSERT INTO footaball.stg_rejects (src_name, raw_record, reason)
+            INSERT INTO football.stg_rejects (src_name, raw_record, reason)
             VALUES (%s, %s, %s)
         """
         self.cursor.execute(query, (

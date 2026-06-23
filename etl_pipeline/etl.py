@@ -1,11 +1,9 @@
-#importing the cdb configuration 
-from database import get_connection , init_db #importing the database connection and initialization functions from the database.py file to establish a connection to the PostgreSQL database and create the necessary schema and tables for the ETL pipeline.
-from extract import extract_csv, extract_api
-from transform import DataTransformer
-from load import DataLoader
-from project_secrets import postgres_password
-from project_logger import logger
-import psycopg2
+from etl_pipeline.database import get_connection , init_db 
+from etl_pipeline.extract import extract_csv, extract_api
+from etl_pipeline.transform import DataTransformer
+from etl_pipeline.load import DataLoader
+from etl_pipeline.project_secrets import postgres_password
+from etl_pipeline.project_logger import logger
 
 def db_connection():
     connection = get_connection()

@@ -1,5 +1,5 @@
 from flask import Blueprint, Flask, jsonify
-import pandas as pd  # type: ignore
+import pandas as pd 
 
 app = Flask(__name__)
 api = Blueprint("api", __name__, url_prefix="/api") # creating a prefix
