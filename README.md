@@ -199,7 +199,7 @@ Features include:
 ---
 
 # Database Schema
-
+<img src="images/Architectural_Diagram.png" width="800">
 The pipeline loads data into a normalized PostgreSQL schema containing tables such as:
 
 - nation
@@ -219,7 +219,7 @@ Each table is connected using primary and foreign keys to ensure referential int
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/international-football-etl.git
+git clone https://github.com/Issouf-Diarrassouba/ETL_Pipeline.git
 
 cd international-football-etl
 ```
